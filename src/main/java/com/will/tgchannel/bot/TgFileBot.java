@@ -1,5 +1,7 @@
 package com.will.tgchannel.bot;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.SQLException;
@@ -8,6 +10,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Properties;
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -19,8 +22,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.mybatis.spring.SqlSessionTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
@@ -48,14 +49,6 @@ public class TgFileBot extends TelegramLongPollingBot {
 //	@Autowired
 //	private SqlSessionTemplate sqlSessionTemplate;
 	SqlSessionTemplate sqlSessionTemplate = SpringBeanFactory.getBean("sqlSessionTemplate");
-
-	@Autowired
-	@Value("${tgbotapi.botUsername}")
-	private String botUsername;
-//	
-	@Autowired
-	@Value("${tgbotapi.botToken}")
-	private String botToken;
 
 	@Override
 	public void onUpdateReceived(Update update) {
@@ -85,7 +78,7 @@ public class TgFileBot extends TelegramLongPollingBot {
 				while (sc.hasNextLine()) {
 					html += sc.nextLine();
 				}
-				org.jsoup.nodes.Document doc = Jsoup.parse(html);//元素
+				org.jsoup.nodes.Document doc = Jsoup.parse(html);// 元素
 				CompletableFuture<Integer> hello = CompletableFuture.supplyAsync(() -> {
 					Integer result = 0;
 					try {
@@ -93,15 +86,16 @@ public class TgFileBot extends TelegramLongPollingBot {
 						Elements elesPageHeader = doc.select("div.page_header");// page_header
 						TgChannel tgChannel = new TgChannel();
 						for (Element headline : elesPageHeader) {
-							String channelName = StringUtils.nonEmptyString(headline.select("div.text.bold").text()) 
-									? headline.select("div.text.bold").text() : "";// group name
+							String channelName = StringUtils.nonEmptyString(headline.select("div.text.bold").text())
+									? headline.select("div.text.bold").text()
+									: "";// group name
 							tgChannel.setChannelName(channelName);
 						}
 						Elements elesMessageDefaultClearfix = doc.select(".message.default.clearfix");
 //						for (Element headline : elesMessageDefaultClearfix) {
-						for(int i = 1; i < elesMessageDefaultClearfix.size(); i++) {
+						for (int i = 1; i < elesMessageDefaultClearfix.size(); i++) {
 							Element headline = elesMessageDefaultClearfix.get(i);
-							tgChannel.setId(IDGeneratorUtils.getUUID());//random ID
+							tgChannel.setId(IDGeneratorUtils.getUUID());// random ID
 							tgChannel.setFromName(headline.select("div.from_name").text());// username
 							tgChannel.setMessage(headline.select("div.text").text());// text
 							Date messageSendDate = new SimpleDateFormat("mm.dd.yyyy HH:mm:ss")
@@ -114,7 +108,7 @@ public class TgFileBot extends TelegramLongPollingBot {
 								result = tgchannelservice.insertTgChannelList(tgChannelList);
 								System.out.println("hello End");
 							}
-							//第1000個insert都會發生重複id的問題
+							// 第1000個insert都會發生重複id的問題
 							if (i % 1000 == 0) {
 								// 手動每1000個一提交，提交後無法回滾
 								session.commit();
@@ -171,8 +165,7 @@ public class TgFileBot extends TelegramLongPollingBot {
 				}
 				if (message.getText().startsWith("about")) {
 					sendMessageRequest.setChatId(update.getMessage().getChatId().toString());
-					sendMessageRequest.setText("這個機器人提供中文使用者查詢中文搜尋爲主要功能,\n" + 
-					"做好玩的，不然人生只有上班才寫程式不能做自己的小玩具也太可憐了八QAQ");
+					sendMessageRequest.setText("這個機器人提供中文使用者查詢中文搜尋爲主要功能,\n" + "做好玩的，如果有任何問題可以發在issues上，謝謝。");
 				}
 				if (message.getText().startsWith("searchKeyWord")) {// return List<TgChannel>
 					try {
@@ -207,26 +200,18 @@ public class TgFileBot extends TelegramLongPollingBot {
 		}
 	}
 
-//	@Autowired
-//	public String getBotUsername2(@Value("${tgbotapi.botUsername}") String botUsername) {
-////		this.botUsername = botUsername;
-//		return botUsername;
-//	}
-//	
-//	@Autowired
-//	public void getBotToken(@Value("${tgbotapi.botToken}") String botToken) {
-//		this.botToken = botToken;
-////		return botUsername;
-//	}
-
 	@Override
 	public String getBotUsername() {
-		return "";
+		Properties prop = getAppProperties();
+		String botUsername = prop.getProperty("tgbotapi.botToken");
+		return botUsername;
 	}
 
 	@Override
 	public String getBotToken() {
-		return "";
+		Properties prop = getAppProperties();
+		String botToken = prop.getProperty("tgbotapi.botToken");
+		return botToken;
 	}
 
 	private static boolean isCommandForOther(String text) {
@@ -234,6 +219,20 @@ public class TgFileBot extends TelegramLongPollingBot {
 		boolean isCommandForMe = text.equals("/start@tggroupbot") || text.equals("/help@tggroupbot")
 				|| text.equals("/stop@tggroupbot");
 		return text.startsWith("/") && !isSimpleCommand && !isCommandForMe;
+	}
+
+	private Properties getAppProperties() {
+		String rootPath = Thread.currentThread().getContextClassLoader().getResource("").getPath();
+		String appConfigPath = rootPath + "application.properties";
+		Properties appProp = new Properties();
+		try {
+			appProp.load(new FileInputStream(appConfigPath));
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return appProp;
 	}
 
 }
